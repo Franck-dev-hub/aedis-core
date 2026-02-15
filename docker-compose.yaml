@@ -1,0 +1,64 @@
+services:
+  backend:
+    build: ./backend
+    container_name: aedis-backend
+    restart: unless-stopped
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - aedis_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers
+
+  frontend:
+    build: ./frontend
+    container_name: aedis-ui
+    environment:
+      - REACT_APP_API_URL=/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - aedis_network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: aedis-db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aedis_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  gateway:
+    build: ./proxy
+    container_name: aedis-gateway
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - aedis_network
+
+volumes:
+  postgres_data:
+
+networks:
+  aedis_network:
+    driver: bridge
